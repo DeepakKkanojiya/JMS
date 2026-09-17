@@ -1,0 +1,12 @@
+export const SYSTEM_ROLES = [
+  'OWNER',
+  'SUPER_ADMIN',
+  'ADMIN',
+  'BRANCH_MANAGER',
+  'CASHIER',
+  'STAFF',
+  'SALESPERSON',
+  'INVENTORY_MANAGER',
+  'ACCOUNTANT',
+  'KARIGAR_SUPERVISOR',
+] as const;

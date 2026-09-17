@@ -1,0 +1,2182 @@
+// Prisma schema for Jewellery ERP (PostgreSQL with multiSchema IAM and Public support)
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  moduleFormat    = "cjs"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["iam", "public"]
+}
+
+model Role {
+  id              String           @id @default(uuid()) @db.Uuid
+  name            String           @unique
+  displayName     String           @map("display_name")
+  description     String?
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+  @@schema("iam")
+}
+
+model Permission {
+  id              String           @id @default(uuid()) @db.Uuid
+  module          String
+  action          String
+  permissionKey   String           @unique @map("permission_key")
+  description     String?
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+  @@schema("iam")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+  @@schema("iam")
+}
+
+model User {
+  id                  String               @id @default(uuid()) @db.Uuid
+  roleId              String               @map("role_id") @db.Uuid
+  role                Role                 @relation(fields: [roleId], references: [id])
+  employeeId          String?              @unique @map("employee_id") @db.Uuid
+  employee            Employee?            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  firstName           String               @map("first_name")
+  lastName            String?              @map("last_name")
+  email               String               @unique
+  mobile              String?
+  passwordHash        String               @map("password_hash")
+  avatarUrl           String?              @map("avatar_url")
+  status              String               @default("ACTIVE")
+  lastLoginAt         DateTime?            @map("last_login_at") @db.Timestamptz
+  createdBy           String?              @map("created_by") @db.Uuid
+  updatedBy           String?              @map("updated_by") @db.Uuid
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+  sessions            UserSession[]
+  loginHistories      LoginHistory[]
+  passwordResetTokens PasswordResetToken[]
+  requestedTransfers  InventoryTransfer[]  @relation("TransferRequestedBy")
+  approvedTransfers   InventoryTransfer[]  @relation("TransferApprovedBy")
+  dispatchedTransfers InventoryTransfer[]  @relation("TransferDispatchedBy")
+  receivedTransfers   InventoryTransfer[]  @relation("TransferReceivedBy")
+  rejectedTransfers   InventoryTransfer[]  @relation("TransferRejectedBy")
+  createdInvoices     SalesInvoice[]       @relation("InvoiceCreatedByUser")
+  updatedInvoices     SalesInvoice[]       @relation("InvoiceUpdatedByUser")
+
+  @@map("users")
+  @@schema("iam")
+}
+
+model UserSession {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique @map("refresh_token")
+  device       String?
+  browser      String?
+  ipAddress    String?  @map("ip_address")
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("user_sessions")
+  @@schema("iam")
+}
+
+model LoginHistory {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loginAt   DateTime  @default(now()) @map("login_at") @db.Timestamptz
+  logoutAt  DateTime? @map("logout_at") @db.Timestamptz
+  ipAddress String?   @map("ip_address")
+  device    String?
+  browser   String?
+  status    String    @default("SUCCESS")
+
+  @@map("login_history")
+  @@schema("iam")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("password_reset_tokens")
+  @@schema("iam")
+}
+
+// ==========================================
+// PHASE 2 MASTER MODELS (Public Schema)
+// ==========================================
+
+model Company {
+  id                   String               @id @default(uuid()) @db.Uuid
+  companyCode          String               @unique @map("company_code")
+  name                 String
+  legalName            String?              @map("legal_name")
+  gstNumber            String?              @unique @map("gst_number")
+  panNumber            String?              @unique @map("pan_number")
+  email                String?
+  phone                String?
+  website              String?
+  logoUrl              String?              @map("logo_url")
+  isActive             Boolean              @default(true) @map("is_active")
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+  branches             Branch[]
+  employees            Employee[]
+  customers            Customer[]
+  vendors              Vendor[]
+  productCategories    ProductCategory[]
+  productSubCategories ProductSubCategory[]
+  products             Product[]
+  inventoryItems       InventoryItem[]
+  metalRates           MetalRate[]
+  makingCharges        MakingCharge[]
+  taxRates             TaxRate[]
+  financialYears       FinancialYear[]
+  documentSeries       DocumentSeries[]
+  jobWorkOrders        JobWorkOrder[]
+  stockAuditSessions   StockAuditSession[]
+  girviLoans           GirviLoan[]
+  thirdPartyLenders    ThirdPartyLender[]
+  thirdPartyGirvis     ThirdPartyGirvi[]
+  approvals            Approval[]
+  approvalDeposits     ApprovalDeposit[]
+
+  @@map("companies")
+  @@schema("public")
+}
+
+model Branch {
+  id                  String                     @id @default(uuid()) @db.Uuid
+  companyId           String                     @map("company_id") @db.Uuid
+  company             Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchCode          String                     @map("branch_code")
+  name                String
+  email               String?
+  phone               String?
+  addressLine1        String?                    @map("address_line1")
+  addressLine2        String?                    @map("address_line2")
+  city                String?
+  state               String?
+  pincode             String?
+  isMainBranch        Boolean                    @default(false) @map("is_main_branch")
+  isActive            Boolean                    @default(true) @map("is_active")
+  createdAt           DateTime                   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime                   @updatedAt @map("updated_at") @db.Timestamptz
+  employees           EmployeeBranchAssignment[]
+  customers           Customer[]
+  vendors             Vendor[]
+  inventoryItems      InventoryItem[]
+  fromBranchMovements StockMovement[]            @relation("FromBranchMovements")
+  toBranchMovements   StockMovement[]            @relation("ToBranchMovements")
+  stockAdjustments    StockAdjustment[]
+  fromBranchTransfers InventoryTransfer[]        @relation("TransferFromBranch")
+  toBranchTransfers   InventoryTransfer[]        @relation("TransferToBranch")
+  salesInvoices       SalesInvoice[]
+  goldExchanges       CustomerGoldExchange[]
+  salesReturns        SalesReturn[]
+  purchaseOrders      PurchaseOrder[]
+  purchaseBills       PurchaseBill[]
+  vendorPayments      VendorPayment[]
+  purchaseReturns     PurchaseReturn[]
+  vendorDebitNotes    VendorDebitNote[]
+  documentSeries      DocumentSeries[]
+  jobWorkOrders       JobWorkOrder[]
+  stockAuditSessions  StockAuditSession[]
+  girviLoans          GirviLoan[]
+  thirdPartyLenders   ThirdPartyLender[]
+  thirdPartyGirvis    ThirdPartyGirvi[]
+  approvals           Approval[]
+  approvalDeposits    ApprovalDeposit[]
+
+  @@unique([companyId, branchCode])
+  @@map("branches")
+  @@schema("public")
+}
+
+model Employee {
+  id                String                     @id @default(uuid()) @db.Uuid
+  companyId         String                     @map("company_id") @db.Uuid
+  company           Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employeeCode      String                     @map("employee_code")
+  firstName         String                     @map("first_name")
+  lastName          String?                    @map("last_name")
+  email             String?                    @unique
+  mobile            String                     @unique
+  joiningDate       DateTime?                  @map("joining_date") @db.Timestamptz
+  isActive          Boolean                    @default(true) @map("is_active")
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime                   @updatedAt @map("updated_at") @db.Timestamptz
+  user              User?
+  salesInvoices     SalesInvoice[]
+  branchAssignments EmployeeBranchAssignment[]
+  approvals         Approval[]
+
+  @@unique([companyId, employeeCode])
+  @@map("employees")
+  @@schema("public")
+}
+
+model Customer {
+  id                String                 @id @default(uuid()) @db.Uuid
+  companyId         String                 @map("company_id") @db.Uuid
+  company           Company                @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId          String?                @map("branch_id") @db.Uuid
+  branch            Branch?                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerCode      String                 @map("customer_code")
+  firstName         String                 @map("first_name")
+  lastName          String?                @map("last_name")
+  email             String?
+  mobile            String                 @unique
+  panNumber         String?                @map("pan_number")
+  aadharNumber      String?                @map("aadhar_number")
+  gstNumber         String?                @map("gst_number")
+  customerType      String                 @default("RETAIL") @map("customer_type")
+  openingCashBalance Decimal?              @default(0.00) @map("opening_cash_balance") @db.Decimal(15, 2)
+  openingGoldBalanceGrams Decimal?        @default(0.000) @map("opening_gold_balance_grams") @db.Decimal(12, 3)
+  openingSilverBalanceGrams Decimal?      @default(0.000) @map("opening_silver_balance_grams") @db.Decimal(12, 3)
+  cashBalance             Decimal?        @default(0.00) @map("cash_balance") @db.Decimal(15, 2)
+  goldBalanceGrams        Decimal?        @default(0.000) @map("gold_balance_grams") @db.Decimal(12, 3)
+  silverBalanceGrams      Decimal?        @default(0.000) @map("silver_balance_grams") @db.Decimal(12, 3)
+  isActive          Boolean                @default(true) @map("is_active")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.Timestamptz
+  customerAddresses CustomerAddress[]
+  customerDocuments CustomerDocument[]
+  salesInvoices     SalesInvoice[]
+  goldExchanges     CustomerGoldExchange[]
+  salesReturns      SalesReturn[]
+  girviLoans        GirviLoan[]
+  thirdPartyGirvis  ThirdPartyGirvi[]
+  approvals         Approval[]
+  approvalDeposits  ApprovalDeposit[]
+
+  @@unique([companyId, customerCode])
+  @@map("customers")
+  @@schema("public")
+}
+
+model CustomerAddress {
+  id           String   @id @default(uuid()) @db.Uuid
+  customerId   String   @map("customer_id") @db.Uuid
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  addressType  String   @default("HOME") @map("address_type")
+  addressLine1 String   @map("address_line1")
+  addressLine2 String?  @map("address_line2")
+  city         String
+  state        String
+  pincode      String
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("customer_addresses")
+  @@schema("public")
+}
+
+model CustomerDocument {
+  id             String   @id @default(uuid()) @db.Uuid
+  customerId     String   @map("customer_id") @db.Uuid
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  documentType   String   @map("document_type")
+  documentNumber String?  @map("document_number")
+  fileUrl        String   @map("file_url")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("customer_documents")
+  @@schema("public")
+}
+
+model Vendor {
+  id             String          @id @default(uuid()) @db.Uuid
+  companyId      String          @map("company_id") @db.Uuid
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId       String?         @map("branch_id") @db.Uuid
+  branch         Branch?         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  vendorCode     String          @map("vendor_code")
+  companyName    String          @map("company_name")
+  contactPerson  String?         @map("contact_person")
+  email          String?
+  mobile         String
+  gstNumber      String?         @unique @map("gst_number")
+  panNumber      String?         @map("pan_number")
+  addressLine1   String?         @map("address_line1")
+  city           String?
+  state          String?
+  pincode        String?
+  vendorType     String          @default("JEWELLERY") @map("vendor_type")
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  purchaseOrders PurchaseOrder[]
+  purchaseBills  PurchaseBill[]
+  vendorPayments VendorPayment[]
+  purchaseReturns PurchaseReturn[]
+  vendorDebitNotes VendorDebitNote[]
+  jobWorkOrders  JobWorkOrder[]
+
+  @@unique([companyId, vendorCode])
+  @@map("vendors")
+  @@schema("public")
+}
+
+model ProductCategory {
+  id                   String               @id @default(uuid()) @db.Uuid
+  companyId            String               @map("company_id") @db.Uuid
+  company              Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name                 String
+  code                 String               @map("code")
+  description          String?
+  isActive             Boolean              @default(true) @map("is_active")
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+  productSubCategories ProductSubCategory[]
+  stockAuditSessions   StockAuditSession[]
+
+  @@unique([companyId, code])
+  @@map("product_categories")
+  @@schema("public")
+}
+
+model ProductSubCategory {
+  id          String          @id @default(uuid()) @db.Uuid
+  companyId   String          @map("company_id") @db.Uuid
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  categoryId  String          @map("category_id") @db.Uuid
+  category    ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name        String
+  code        String          @map("code")
+  description String?
+  isActive    Boolean         @default(true) @map("is_active")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  products    Product[]
+
+  @@unique([companyId, code])
+  @@map("product_sub_categories")
+  @@schema("public")
+}
+
+model Product {
+  id            String             @id @default(uuid()) @db.Uuid
+  companyId     String             @map("company_id") @db.Uuid
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  subCategoryId String             @map("sub_category_id") @db.Uuid
+  subCategory   ProductSubCategory @relation(fields: [subCategoryId], references: [id], onDelete: Restrict)
+  sku           String             @map("sku")
+  name          String
+  description   String?
+  metalType     String             @default("GOLD") @map("metal_type")
+  purity        String             @default("22K")
+  grossWeight   Decimal            @default(0.00) @map("gross_weight") @db.Decimal(10, 3)
+  netWeight     Decimal            @default(0.00) @map("net_weight") @db.Decimal(10, 3)
+  isActive      Boolean            @default(true) @map("is_active")
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  inventoryItems       InventoryItem[]
+  images               ProductImage[]
+  purchaseOrderItems   PurchaseOrderItem[]
+  purchaseReceiptItems PurchaseReceiptItem[]
+
+  @@unique([companyId, sku])
+  @@map("products")
+  @@schema("public")
+}
+
+// ==========================================
+// PHASE 3 INVENTORY MODELS (Public Schema)
+// ==========================================
+
+model InventoryItem {
+  id                    String               @id @default(uuid()) @db.Uuid
+  companyId             String               @map("company_id") @db.Uuid
+  company               Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  productId             String               @map("product_id") @db.Uuid
+  product               Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  branchId              String               @map("branch_id") @db.Uuid
+  branch                Branch               @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  purchaseReceiptItemId String?              @map("purchase_receipt_item_id") @db.Uuid
+  purchaseReceiptItem   PurchaseReceiptItem? @relation(fields: [purchaseReceiptItemId], references: [id], onDelete: Restrict)
+  itemCode              String               @map("item_code")
+  grossWeight           Decimal              @map("gross_weight") @db.Decimal(12, 3)
+  netWeight             Decimal              @map("net_weight") @db.Decimal(12, 3)
+  stoneWeight           Decimal              @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  fineWeight            Decimal              @map("fine_weight") @db.Decimal(12, 3)
+  purity                String
+  status                String               @default("AVAILABLE")
+  createdBy             String?              @map("created_by") @db.Uuid
+  updatedBy             String?              @map("updated_by") @db.Uuid
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+  tags                  InventoryTag[]
+  images                InventoryItemImage[]
+  stockMovements        StockMovement[]
+  stockAdjustments      StockAdjustment[]
+  transfers             InventoryTransfer[]
+  salesInvoiceItems     SalesInvoiceItem[]
+  salesReturnItems      SalesReturnItem[]
+  purchaseBillItems     PurchaseBillItem[]
+  purchaseReturnItems   PurchaseReturnItem[]
+  jobWorkMaterialIssues JobWorkMaterialIssue[]
+  jobWorkReceipts       JobWorkReceipt[]
+  stockAuditItems       StockAuditItem[]
+  girviCollaterals      GirviCollateral[]
+  thirdPartyCollaterals ThirdPartyGirviCollateral[]
+  approvalItems         ApprovalItem[]
+
+  @@unique([companyId, itemCode])
+  @@index([productId])
+  @@index([branchId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("inventory_items")
+  @@schema("public")
+}
+
+model InventoryTag {
+  id              String        @id @default(uuid()) @db.Uuid
+  inventoryItemId String        @map("inventory_item_id") @db.Uuid
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  barcode         String        @unique
+  rfidEpc         String?       @unique @map("rfid_epc")
+  isActive        Boolean       @default(true) @map("is_active")
+  taggedAt        DateTime      @default(now()) @map("tagged_at") @db.Timestamptz
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([inventoryItemId])
+  @@map("inventory_tags")
+  @@schema("public")
+}
+
+model StockMovement {
+  id              String        @id @default(uuid()) @db.Uuid
+  inventoryItemId String        @map("inventory_item_id") @db.Uuid
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  fromBranchId    String?       @map("from_branch_id") @db.Uuid
+  fromBranch      Branch?       @relation("FromBranchMovements", fields: [fromBranchId], references: [id], onDelete: SetNull)
+  toBranchId      String?       @map("to_branch_id") @db.Uuid
+  toBranch        Branch?       @relation("ToBranchMovements", fields: [toBranchId], references: [id], onDelete: SetNull)
+  movementType    String        @map("movement_type")
+  referenceType   String?       @map("reference_type")
+  referenceId     String?       @map("reference_id")
+  remarks         String?
+  performedBy     String?       @map("performed_by") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([inventoryItemId])
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([movementType])
+  @@index([createdAt])
+  @@map("stock_movements")
+  @@schema("public")
+}
+
+model StockAdjustment {
+  id                  String        @id @default(uuid()) @db.Uuid
+  inventoryItemId     String        @map("inventory_item_id") @db.Uuid
+  inventoryItem       InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  branchId            String        @map("branch_id") @db.Uuid
+  branch              Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  previousStatus      String        @map("previous_status")
+  newStatus           String        @map("new_status")
+  previousGrossWeight Decimal       @map("previous_gross_weight") @db.Decimal(10, 3)
+  newGrossWeight      Decimal       @map("new_gross_weight") @db.Decimal(10, 3)
+  previousNetWeight   Decimal       @map("previous_net_weight") @db.Decimal(10, 3)
+  newNetWeight        Decimal       @map("new_net_weight") @db.Decimal(10, 3)
+  reason              String
+  adjustedBy          String?       @map("adjusted_by") @db.Uuid
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([inventoryItemId])
+  @@index([branchId])
+  @@index([createdAt])
+  @@map("stock_adjustments")
+  @@schema("public")
+}
+
+enum TransferStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  DISPATCHED
+  RECEIVED
+  CANCELLED
+
+  @@map("transfer_status")
+  @@schema("public")
+}
+
+model InventoryTransfer {
+  id              String         @id @default(uuid()) @db.Uuid
+  transferCode    String         @unique @map("transfer_code")
+  inventoryItemId String         @map("inventory_item_id") @db.Uuid
+  inventoryItem   InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  fromBranchId    String         @map("from_branch_id") @db.Uuid
+  fromBranch      Branch         @relation("TransferFromBranch", fields: [fromBranchId], references: [id], onDelete: Restrict)
+  toBranchId      String         @map("to_branch_id") @db.Uuid
+  toBranch        Branch         @relation("TransferToBranch", fields: [toBranchId], references: [id], onDelete: Restrict)
+  status          TransferStatus @default(REQUESTED)
+
+  requestedBy     String @map("requested_by") @db.Uuid
+  requestedByUser User   @relation("TransferRequestedBy", fields: [requestedBy], references: [id], onDelete: Restrict)
+
+  approvedBy     String?   @map("approved_by") @db.Uuid
+  approvedByUser User?     @relation("TransferApprovedBy", fields: [approvedBy], references: [id], onDelete: Restrict)
+  approvedAt     DateTime? @map("approved_at") @db.Timestamptz
+
+  dispatchedBy     String?   @map("dispatched_by") @db.Uuid
+  dispatchedByUser User?     @relation("TransferDispatchedBy", fields: [dispatchedBy], references: [id], onDelete: Restrict)
+  dispatchedAt     DateTime? @map("dispatched_at") @db.Timestamptz
+
+  receivedBy     String?   @map("received_by") @db.Uuid
+  receivedByUser User?     @relation("TransferReceivedBy", fields: [receivedBy], references: [id], onDelete: Restrict)
+  receivedAt     DateTime? @map("received_at") @db.Timestamptz
+
+  rejectedBy      String?   @map("rejected_by") @db.Uuid
+  rejectedByUser  User?     @relation("TransferRejectedBy", fields: [rejectedBy], references: [id], onDelete: Restrict)
+  rejectedAt      DateTime? @map("rejected_at") @db.Timestamptz
+  rejectionReason String?   @map("rejection_reason")
+
+  remarks   String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([inventoryItemId])
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("inventory_transfers")
+  @@schema("public")
+}
+
+model ProductImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  productId    String   @map("product_id") @db.Uuid
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl     String   @map("image_url")
+  thumbnailUrl String?  @map("thumbnail_url")
+  altText      String?  @map("alt_text")
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([productId])
+  @@map("product_images")
+  @@schema("public")
+}
+
+model InventoryItemImage {
+  id              String        @id @default(uuid()) @db.Uuid
+  inventoryItemId String        @map("inventory_item_id") @db.Uuid
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  imageUrl        String        @map("image_url")
+  thumbnailUrl    String?       @map("thumbnail_url")
+  altText         String?       @map("alt_text")
+  isPrimary       Boolean       @default(false) @map("is_primary")
+  sortOrder       Int           @default(0) @map("sort_order")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([inventoryItemId])
+  @@map("inventory_item_images")
+  @@schema("public")
+}
+
+// ==========================================
+// PHASE 4 SALES MANAGEMENT MODELS (Public Schema)
+// ==========================================
+
+enum SalesInvoiceStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+
+  @@map("sales_invoice_status")
+  @@schema("public")
+}
+
+model SalesInvoice {
+  id                  String             @id @default(uuid()) @db.Uuid
+  invoiceNumber       String             @unique @map("invoice_number")
+  customerId          String             @map("customer_id") @db.Uuid
+  customer            Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branchId            String             @map("branch_id") @db.Uuid
+  branch              Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  salespersonId       String?            @map("salesperson_id") @db.Uuid
+  salesperson         Employee?          @relation(fields: [salespersonId], references: [id], onDelete: SetNull)
+  status              SalesInvoiceStatus @default(DRAFT)
+  invoiceDate         DateTime           @default(now()) @map("invoice_date") @db.Timestamptz
+  subtotal            Decimal            @default(0.00) @map("subtotal") @db.Decimal(12, 2)
+  metalValue          Decimal            @default(0.00) @map("metal_value") @db.Decimal(12, 2)
+  wastageValue        Decimal            @default(0.00) @map("wastage_value") @db.Decimal(12, 2)
+  makingCharges       Decimal            @default(0.00) @map("making_charges") @db.Decimal(12, 2)
+  taxableAmount       Decimal            @default(0.00) @map("taxable_amount") @db.Decimal(12, 2)
+  discountAmount      Decimal            @default(0.00) @map("discount_amount") @db.Decimal(12, 2)
+  cgstAmount          Decimal            @default(0.00) @map("cgst_amount") @db.Decimal(12, 2)
+  sgstAmount          Decimal            @default(0.00) @map("sgst_amount") @db.Decimal(12, 2)
+  igstAmount          Decimal            @default(0.00) @map("igst_amount") @db.Decimal(12, 2)
+  taxAmount           Decimal            @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  grandTotal          Decimal            @default(0.00) @map("grand_total") @db.Decimal(12, 2)
+  pricingCalculated   Boolean            @default(false) @map("pricing_calculated")
+  pricingCalculatedAt DateTime?          @map("pricing_calculated_at") @db.Timestamptz
+  notes               String?
+  createdByUserId     String?            @map("created_by_user_id") @db.Uuid
+  createdByUser       User?              @relation("InvoiceCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  updatedByUserId     String?            @map("updated_by_user_id") @db.Uuid
+  updatedByUser       User?              @relation("InvoiceUpdatedByUser", fields: [updatedByUserId], references: [id], onDelete: Restrict)
+  metalRateLocked     Boolean            @default(false) @map("metal_rate_locked")
+  metalRateLockedAt   DateTime?          @map("metal_rate_locked_at") @db.Timestamptz
+  totalPaid           Decimal            @default(0.00) @map("total_paid") @db.Decimal(12, 2)
+  outstandingAmount   Decimal            @default(0.00) @map("outstanding_amount") @db.Decimal(12, 2)
+  paymentStatus       String             @default("UNPAID") @map("payment_status")
+  exchangeCredit      Decimal            @default(0.00) @map("exchange_credit") @db.Decimal(12, 2)
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Confirmation legal snapshots
+  companyNameSnapshot     String? @map("company_name_snapshot")
+  companyGstSnapshot      String? @map("company_gst_snapshot")
+  companyAddressSnapshot  String? @map("company_address_snapshot")
+  branchNameSnapshot      String? @map("branch_name_snapshot")
+  branchAddressSnapshot   String? @map("branch_address_snapshot")
+  customerNameSnapshot    String? @map("customer_name_snapshot")
+  customerMobileSnapshot  String? @map("customer_mobile_snapshot")
+  customerAddressSnapshot String? @map("customer_address_snapshot")
+  customerGstSnapshot     String? @map("customer_gst_snapshot")
+
+  items             SalesInvoiceItem[]
+  metalRateSnapshot SalesInvoiceMetalRate?
+  payments          SalesPayment[]
+  goldExchanges     CustomerGoldExchange[]
+  salesReturns      SalesReturn[]
+
+  @@index([branchId])
+  @@index([customerId])
+  @@index([status])
+  @@index([invoiceDate])
+  @@map("sales_invoices")
+  @@schema("public")
+}
+
+model SalesInvoiceItem {
+  id                 String            @id @default(uuid()) @db.Uuid
+  salesInvoiceId     String            @map("sales_invoice_id") @db.Uuid
+  salesInvoice       SalesInvoice      @relation(fields: [salesInvoiceId], references: [id], onDelete: Cascade)
+  inventoryItemId    String            @map("inventory_item_id") @db.Uuid
+  inventoryItem      InventoryItem     @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  salesReturnItems   SalesReturnItem[]
+  quantity           Int               @default(1)
+  unitPrice          Decimal           @map("unit_price") @db.Decimal(12, 2)
+  metalValue         Decimal           @default(0.00) @map("metal_value") @db.Decimal(12, 2)
+  wastagePercent     Decimal           @default(0.00) @map("wastage_percent") @db.Decimal(5, 2)
+  wastageWeight      Decimal           @default(0.000) @map("wastage_weight") @db.Decimal(12, 3)
+  wastageValue       Decimal           @default(0.00) @map("wastage_value") @db.Decimal(12, 2)
+  makingChargeType   MakingChargeType? @map("making_charge_type")
+  makingChargeRate   Decimal           @default(0.00) @map("making_charge_rate") @db.Decimal(12, 2)
+  makingChargeAmount Decimal           @default(0.00) @map("making_charge_amount") @db.Decimal(12, 2)
+  taxableAmount      Decimal           @default(0.00) @map("taxable_amount") @db.Decimal(12, 2)
+  taxRate            Decimal           @default(0.00) @map("tax_rate") @db.Decimal(5, 2)
+  discountAmount     Decimal           @default(0.00) @map("discount_amount") @db.Decimal(12, 2)
+  taxAmount          Decimal           @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  lineTotal          Decimal           @map("line_total") @db.Decimal(12, 2)
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Confirmation item snapshots
+  productNameSnapshot String?  @map("product_name_snapshot")
+  productSkuSnapshot  String?  @map("product_sku_snapshot")
+  metalTypeSnapshot   String?  @map("metal_type_snapshot")
+  puritySnapshot      String?  @map("purity_snapshot")
+  grossWeightSnapshot Decimal? @map("gross_weight_snapshot") @db.Decimal(12, 3)
+  netWeightSnapshot   Decimal? @map("net_weight_snapshot") @db.Decimal(12, 3)
+  stoneWeightSnapshot Decimal? @map("stone_weight_snapshot") @db.Decimal(12, 3)
+  fineWeightSnapshot  Decimal? @map("fine_weight_snapshot") @db.Decimal(12, 3)
+
+  @@index([salesInvoiceId])
+  @@index([inventoryItemId])
+  @@map("sales_invoice_items")
+  @@schema("public")
+}
+
+// ==========================================
+// SPRINT 4.4 PRICING & TAX MODELS (Public Schema)
+// ==========================================
+
+enum MakingChargeType {
+  PER_GRAM
+  FIXED
+  PERCENTAGE
+
+  @@map("making_charge_type")
+  @@schema("public")
+}
+
+model MakingCharge {
+  id            String           @id @default(uuid()) @db.Uuid
+  companyId     String           @map("company_id") @db.Uuid
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  metalType     MetalType        @map("metal_type")
+  purity        String
+  chargeType    MakingChargeType @map("charge_type")
+  rate          Decimal          @db.Decimal(12, 2)
+  effectiveFrom DateTime         @map("effective_from") @db.Timestamptz
+  effectiveTo   DateTime?        @map("effective_to") @db.Timestamptz
+  isActive      Boolean          @default(true) @map("is_active")
+  createdBy     String?          @map("created_by") @db.Uuid
+  updatedBy     String?          @map("updated_by") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([companyId])
+  @@index([metalType, purity])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([isActive])
+  @@map("making_charges")
+  @@schema("public")
+}
+
+model TaxRate {
+  id            String    @id @default(uuid()) @db.Uuid
+  companyId     String    @map("company_id") @db.Uuid
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  taxName       String    @map("tax_name")
+  taxCode       String    @map("tax_code")
+  rate          Decimal   @db.Decimal(5, 2)
+  effectiveFrom DateTime  @map("effective_from") @db.Timestamptz
+  effectiveTo   DateTime? @map("effective_to") @db.Timestamptz
+  isActive      Boolean   @default(true) @map("is_active")
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([companyId])
+  @@index([taxCode])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([isActive])
+  @@map("tax_rates")
+  @@schema("public")
+}
+
+// ==========================================
+// SPRINT 4.2 METAL RATE ENGINE MODELS (Public Schema)
+// ==========================================
+
+enum MetalType {
+  GOLD
+  SILVER
+  PLATINUM
+
+  @@map("metal_type")
+  @@schema("public")
+}
+
+model MetalRate {
+  id                String    @id @default(uuid()) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  metalType         MetalType @map("metal_type")
+  purity            String
+  marketRatePerGram Decimal?  @map("market_rate_per_gram") @db.Decimal(12, 2)
+  ratePerGram       Decimal   @map("rate_per_gram") @db.Decimal(12, 2)
+  effectiveFrom     DateTime  @map("effective_from") @db.Timestamptz
+  effectiveTo       DateTime? @map("effective_to") @db.Timestamptz
+  isActive          Boolean   @default(true) @map("is_active")
+  createdBy         String?   @map("created_by") @db.Uuid
+  updatedBy         String?   @map("updated_by") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  invoiceMetalRates SalesInvoiceMetalRate[]
+  exchangeItems     CustomerGoldExchangeItem[]
+
+  @@index([companyId])
+  @@index([metalType, purity])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([isActive])
+  @@map("metal_rates")
+  @@schema("public")
+}
+
+model SalesInvoiceMetalRate {
+  id             String       @id @default(uuid()) @db.Uuid
+  salesInvoiceId String       @unique @map("sales_invoice_id") @db.Uuid
+  salesInvoice   SalesInvoice @relation(fields: [salesInvoiceId], references: [id], onDelete: Cascade)
+  metalRateId    String?      @map("metal_rate_id") @db.Uuid
+  metalRate      MetalRate?   @relation(fields: [metalRateId], references: [id], onDelete: SetNull)
+  metalType      MetalType    @map("metal_type")
+  purity         String
+  ratePerGram    Decimal      @map("rate_per_gram") @db.Decimal(12, 2)
+  lockedAt       DateTime     @default(now()) @map("locked_at") @db.Timestamptz
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([salesInvoiceId])
+  @@index([metalRateId])
+  @@map("sales_invoice_metal_rates")
+  @@schema("public")
+}
+
+// ==========================================
+// SPRINT 4.5 PAYMENT & SETTLEMENT MODELS (Public Schema)
+// ==========================================
+
+enum PaymentMethod {
+  CASH
+  CARD
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+
+  @@map("payment_method")
+  @@schema("public")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REVERSED
+
+  @@map("payment_status")
+  @@schema("public")
+}
+
+model SalesPayment {
+  id                   String        @id @default(uuid()) @db.Uuid
+  salesInvoiceId       String        @map("sales_invoice_id") @db.Uuid
+  salesInvoice         SalesInvoice  @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  paymentNumber        String        @unique @map("payment_number")
+  paymentMethod        PaymentMethod @map("payment_method")
+  amount               Decimal       @db.Decimal(12, 2)
+  status               PaymentStatus @default(COMPLETED)
+  transactionReference String?       @map("transaction_reference")
+  paymentDate          DateTime      @default(now()) @map("payment_date") @db.Timestamptz
+  remarks              String?
+  receivedBy           String?       @map("received_by") @db.Uuid
+  reversedAt           DateTime?     @map("reversed_at") @db.Timestamptz
+  reversedBy           String?       @map("reversed_by") @db.Uuid
+  reversalReason       String?       @map("reversal_reason")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([salesInvoiceId])
+  @@index([paymentMethod])
+  @@index([status])
+  @@index([paymentDate])
+  @@index([transactionReference])
+  @@map("sales_payments")
+  @@schema("public")
+}
+
+// ==========================================
+// SPRINT 4.6 GOLD EXCHANGE MODELS (Public Schema)
+// ==========================================
+
+enum ExchangeStatus {
+  REQUESTED
+  VALUED
+  APPLIED
+  CANCELLED
+
+  @@map("exchange_status")
+  @@schema("public")
+}
+
+model CustomerGoldExchange {
+  id                   String         @id @default(uuid()) @db.Uuid
+  exchangeNumber       String         @unique @map("exchange_number")
+  salesInvoiceId       String         @map("sales_invoice_id") @db.Uuid
+  salesInvoice         SalesInvoice   @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  customerId           String         @map("customer_id") @db.Uuid
+  customer             Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branchId             String         @map("branch_id") @db.Uuid
+  branch               Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  status               ExchangeStatus @default(REQUESTED)
+  totalGrossWeight     Decimal        @default(0.000) @map("total_gross_weight") @db.Decimal(12, 3)
+  totalStoneWeight     Decimal        @default(0.000) @map("total_stone_weight") @db.Decimal(12, 3)
+  totalNetWeight       Decimal        @default(0.000) @map("total_net_weight") @db.Decimal(12, 3)
+  totalMetalValue      Decimal        @default(0.00) @map("total_metal_value") @db.Decimal(12, 2)
+  totalDeductionAmount Decimal        @default(0.00) @map("total_deduction_amount") @db.Decimal(12, 2)
+  totalExchangeValue   Decimal        @default(0.00) @map("total_exchange_value") @db.Decimal(12, 2)
+  remarks              String?
+  createdBy            String?        @map("created_by") @db.Uuid
+  updatedBy            String?        @map("updated_by") @db.Uuid
+  appliedAt            DateTime?      @map("applied_at") @db.Timestamptz
+  cancelledAt          DateTime?      @map("cancelled_at") @db.Timestamptz
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  items CustomerGoldExchangeItem[]
+
+  @@index([salesInvoiceId])
+  @@index([customerId])
+  @@index([branchId])
+  @@index([status])
+  @@index([exchangeNumber])
+  @@index([createdAt])
+  @@map("customer_gold_exchanges")
+  @@schema("public")
+}
+
+model CustomerGoldExchangeItem {
+  id               String               @id @default(uuid()) @db.Uuid
+  exchangeId       String               @map("exchange_id") @db.Uuid
+  exchange         CustomerGoldExchange @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+  metalType        MetalType            @map("metal_type")
+  purity           String
+  grossWeight      Decimal              @map("gross_weight") @db.Decimal(12, 3)
+  stoneWeight      Decimal              @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  netWeight        Decimal              @map("net_weight") @db.Decimal(12, 3)
+  metalRateId      String?              @map("metal_rate_id") @db.Uuid
+  metalRate        MetalRate?           @relation(fields: [metalRateId], references: [id], onDelete: SetNull)
+  ratePerGram      Decimal              @default(0.00) @map("rate_per_gram") @db.Decimal(12, 2)
+  metalValue       Decimal              @default(0.00) @map("metal_value") @db.Decimal(12, 2)
+  deductionPercent Decimal              @default(0.0000) @map("deduction_percent") @db.Decimal(8, 4)
+  deductionAmount  Decimal              @default(0.00) @map("deduction_amount") @db.Decimal(12, 2)
+  exchangeValue    Decimal              @default(0.00) @map("exchange_value") @db.Decimal(12, 2)
+  remarks          String?
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([exchangeId])
+  @@index([metalRateId])
+  @@index([metalType, purity])
+  @@map("customer_gold_exchange_items")
+  @@schema("public")
+}
+
+// ==========================================
+// SPRINT 4.7 SALES RETURN & REFUND MODELS (Public Schema)
+// ==========================================
+
+enum SalesReturnStatus {
+  REQUESTED
+  APPROVED
+  PROCESSED
+  CANCELLED
+
+  @@map("sales_return_status")
+  @@schema("public")
+}
+
+model SalesReturn {
+  id                 String            @id @default(uuid()) @db.Uuid
+  returnNumber       String            @unique @map("return_number")
+  salesInvoiceId     String            @map("sales_invoice_id") @db.Uuid
+  salesInvoice       SalesInvoice      @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  customerId         String            @map("customer_id") @db.Uuid
+  customer           Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branchId           String            @map("branch_id") @db.Uuid
+  branch             Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  status             SalesReturnStatus @default(REQUESTED)
+  subtotal           Decimal           @default(0.00) @db.Decimal(12, 2)
+  taxAmount          Decimal           @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  deductionAmount    Decimal           @default(0.00) @map("deduction_amount") @db.Decimal(12, 2)
+  refundAmount       Decimal           @default(0.00) @map("refund_amount") @db.Decimal(12, 2)
+  reason             String?
+  remarks            String?
+  requestedBy        String?           @map("requested_by") @db.Uuid
+  approvedBy         String?           @map("approved_by") @db.Uuid
+  processedBy        String?           @map("processed_by") @db.Uuid
+  cancelledBy        String?           @map("cancelled_by") @db.Uuid
+  approvedAt         DateTime?         @map("approved_at") @db.Timestamptz
+  processedAt        DateTime?         @map("processed_at") @db.Timestamptz
+  cancelledAt        DateTime?         @map("cancelled_at") @db.Timestamptz
+  cancellationReason String?           @map("cancellation_reason")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  items   SalesReturnItem[]
+  refunds SalesRefund[]
+
+  @@index([salesInvoiceId])
+  @@index([customerId])
+  @@index([branchId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("sales_returns")
+  @@schema("public")
+}
+
+model SalesReturnItem {
+  id                 String           @id @default(uuid()) @db.Uuid
+  salesReturnId      String           @map("sales_return_id") @db.Uuid
+  salesReturn        SalesReturn      @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  salesInvoiceItemId String           @map("sales_invoice_item_id") @db.Uuid
+  salesInvoiceItem   SalesInvoiceItem @relation(fields: [salesInvoiceItemId], references: [id], onDelete: Restrict)
+  inventoryItemId    String           @map("inventory_item_id") @db.Uuid
+  inventoryItem      InventoryItem    @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  quantity           Int              @default(1)
+  originalAmount     Decimal          @map("original_amount") @db.Decimal(12, 2)
+  taxAmount          Decimal          @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  deductionAmount    Decimal          @default(0.00) @map("deduction_amount") @db.Decimal(12, 2)
+  refundAmount       Decimal          @default(0.00) @map("refund_amount") @db.Decimal(12, 2)
+  reason             String?
+  remarks            String?
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([salesReturnId])
+  @@index([salesInvoiceItemId])
+  @@index([inventoryItemId])
+  @@map("sales_return_items")
+  @@schema("public")
+}
+
+enum RefundStatus {
+  PENDING
+  COMPLETED
+  REVERSED
+
+  @@map("refund_status")
+  @@schema("public")
+}
+
+model SalesRefund {
+  id                   String        @id @default(uuid()) @db.Uuid
+  salesReturnId        String        @map("sales_return_id") @db.Uuid
+  salesReturn          SalesReturn   @relation(fields: [salesReturnId], references: [id], onDelete: Restrict)
+  refundNumber         String        @unique @map("refund_number")
+  refundMethod         PaymentMethod @map("refund_method")
+  amount               Decimal       @db.Decimal(12, 2)
+  status               RefundStatus  @default(COMPLETED)
+  transactionReference String?       @map("transaction_reference")
+  remarks              String?
+  processedBy          String?       @map("processed_by") @db.Uuid
+  reversedAt           DateTime?     @map("reversed_at") @db.Timestamptz
+  reversedBy           String?       @map("reversed_by") @db.Uuid
+  reversalReason       String?       @map("reversal_reason")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([salesReturnId])
+  @@index([refundMethod])
+  @@index([status])
+  @@index([createdAt])
+  @@map("sales_refunds")
+  @@schema("public")
+}
+
+// ==========================================
+// PHASE 5 PROCUREMENT & PURCHASE ORDER MODELS (Public Schema)
+// ==========================================
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  RECEIVING
+  COMPLETED
+  CANCELLED
+
+  @@map("purchase_order_status")
+  @@schema("public")
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(uuid()) @db.Uuid
+  purchaseOrderNumber  String              @unique @map("purchase_order_number")
+  vendorId             String              @map("vendor_id") @db.Uuid
+  vendor               Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  branchId             String              @map("branch_id") @db.Uuid
+  branch               Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  status               PurchaseOrderStatus @default(DRAFT)
+  orderDate            DateTime            @default(now()) @map("order_date") @db.Timestamptz
+  expectedDeliveryDate DateTime?           @map("expected_delivery_date") @db.Timestamptz
+  subtotal             Decimal             @default(0.00) @map("subtotal") @db.Decimal(12, 2)
+  taxAmount            Decimal             @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  grandTotal           Decimal             @default(0.00) @map("grand_total") @db.Decimal(12, 2)
+  notes                String?
+  termsConditions      String?             @map("terms_conditions")
+  createdBy            String?             @map("created_by") @db.Uuid
+  updatedBy            String?             @map("updated_by") @db.Uuid
+  submittedBy          String?             @map("submitted_by") @db.Uuid
+  submittedAt          DateTime?           @map("submitted_at") @db.Timestamptz
+  approvedBy           String?             @map("approved_by") @db.Uuid
+  approvedAt           DateTime?           @map("approved_at") @db.Timestamptz
+  cancelledBy          String?             @map("cancelled_by") @db.Uuid
+  cancelledAt          DateTime?           @map("cancelled_at") @db.Timestamptz
+  cancellationReason   String?             @map("cancellation_reason")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  items            PurchaseOrderItem[]
+  purchaseReceipts PurchaseReceipt[]
+  purchaseBills    PurchaseBill[]
+  purchaseReturns  PurchaseReturn[]
+
+  @@index([vendorId])
+  @@index([branchId])
+  @@index([status])
+  @@index([orderDate])
+  @@index([purchaseOrderNumber])
+  @@map("purchase_orders")
+  @@schema("public")
+}
+
+model PurchaseOrderItem {
+  id               String        @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String        @map("purchase_order_id") @db.Uuid
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId        String?       @map("product_id") @db.Uuid
+  product          Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  metalType        MetalType     @map("metal_type")
+  purity           String
+  itemName         String        @map("item_name")
+  description      String?
+  orderedQuantity  Int           @default(1) @map("ordered_quantity")
+  receivedQuantity Int           @default(0) @map("received_quantity")
+  grossWeight      Decimal       @map("gross_weight") @db.Decimal(10, 3)
+  netWeight        Decimal       @map("net_weight") @db.Decimal(10, 3)
+  stoneWeight      Decimal       @default(0.000) @map("stone_weight") @db.Decimal(10, 3)
+  expectedRate     Decimal       @map("expected_rate") @db.Decimal(12, 2)
+  makingCharges    Decimal       @default(0.00) @map("making_charges") @db.Decimal(12, 2)
+  taxRate          Decimal       @default(0.00) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount        Decimal       @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  itemTotal        Decimal       @map("item_total") @db.Decimal(12, 2)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  purchaseBillItems PurchaseBillItem[]
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+  @@index([metalType, purity])
+  @@map("purchase_order_items")
+  @@schema("public")
+}
+
+model EmployeeBranchAssignment {
+  id            String    @id @default(uuid()) @db.Uuid
+  employeeId    String    @map("employee_id") @db.Uuid
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  branchId      String    @map("branch_id") @db.Uuid
+  branch        Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  designation   String
+  isPrimary     Boolean   @default(true) @map("is_primary")
+  effectiveFrom DateTime  @default(now()) @map("effective_from") @db.Timestamptz
+  effectiveTo   DateTime? @map("effective_to") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("employee_branch_assignments")
+  @@schema("public")
+}
+
+enum PurchaseReceiptStatus {
+  DRAFT
+  RECEIVED
+  CANCELLED
+
+  @@map("purchase_receipt_status")
+  @@schema("public")
+}
+
+model PurchaseReceipt {
+  id                    String                @id @default(uuid()) @db.Uuid
+  purchaseReceiptNumber String                @unique @map("purchase_receipt_number")
+  purchaseOrderId       String                @map("purchase_order_id") @db.Uuid
+  purchaseOrder         PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  status                PurchaseReceiptStatus @default(DRAFT)
+  receivedDate          DateTime              @default(now()) @map("received_date") @db.Timestamptz
+  subtotal              Decimal               @default(0.00) @map("subtotal") @db.Decimal(12, 2)
+  taxAmount             Decimal               @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  grandTotal            Decimal               @default(0.00) @map("grand_total") @db.Decimal(12, 2)
+  remarks               String?
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+  items                 PurchaseReceiptItem[]
+
+  @@map("purchase_receipts")
+  @@schema("public")
+}
+
+model PurchaseReceiptItem {
+  id                String          @id @default(uuid()) @db.Uuid
+  purchaseReceiptId String          @map("purchase_receipt_id") @db.Uuid
+  purchaseReceipt   PurchaseReceipt @relation(fields: [purchaseReceiptId], references: [id], onDelete: Cascade)
+  productId         String          @map("product_id") @db.Uuid
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  receivedQuantity  Int             @default(1) @map("received_quantity")
+  grossWeight       Decimal         @map("gross_weight") @db.Decimal(12, 3)
+  netWeight         Decimal         @map("net_weight") @db.Decimal(12, 3)
+  stoneWeight       Decimal         @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  fineWeight        Decimal         @map("fine_weight") @db.Decimal(12, 3)
+  purchaseRate      Decimal         @map("purchase_rate") @db.Decimal(12, 2)
+  makingCharges     Decimal         @default(0.00) @map("making_charges") @db.Decimal(12, 2)
+  taxRate           Decimal         @default(0.00) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount         Decimal         @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  itemTotal         Decimal         @map("item_total") @db.Decimal(12, 2)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  inventoryItems    InventoryItem[]
+  purchaseBillItems PurchaseBillItem[]
+
+  @@map("purchase_receipt_items")
+  @@schema("public")
+}
+
+model FinancialYear {
+  id        String           @id @default(uuid()) @db.Uuid
+  companyId String           @map("company_id") @db.Uuid
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name      String
+  startDate DateTime         @map("start_date") @db.Timestamptz
+  endDate   DateTime         @map("end_date") @db.Timestamptz
+  isCurrent Boolean          @default(false) @map("is_current")
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  series    DocumentSeries[]
+
+  @@map("financial_years")
+  @@schema("public")
+}
+
+model DocumentSeries {
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @map("company_id") @db.Uuid
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId        String?       @map("branch_id") @db.Uuid
+  branch          Branch?       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  financialYearId String        @map("financial_year_id") @db.Uuid
+  financialYear   FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Restrict)
+  documentType    String        @map("document_type")
+  prefix          String
+  nextNumber      Int           @default(1) @map("next_number")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("document_series")
+  @@schema("public")
+}
+
+enum PurchaseBillStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+
+  @@map("purchase_bill_status")
+  @@schema("public")
+}
+
+model PurchaseBill {
+  id                 String             @id @default(uuid()) @db.Uuid
+  billNumber         String             @unique @map("bill_number")
+  purchaseOrderId    String             @map("purchase_order_id") @db.Uuid
+  purchaseOrder      PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  vendorId           String             @map("vendor_id") @db.Uuid
+  vendor             Vendor             @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  branchId           String             @map("branch_id") @db.Uuid
+  branch             Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  status             PurchaseBillStatus @default(DRAFT)
+  billDate           DateTime           @default(now()) @map("bill_date") @db.Timestamptz
+  dueDate            DateTime?          @map("due_date") @db.Timestamptz
+  subtotal           Decimal            @default(0.00) @map("subtotal") @db.Decimal(12, 2)
+  discountAmount     Decimal            @default(0.00) @map("discount_amount") @db.Decimal(12, 2)
+  taxAmount          Decimal            @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  grandTotal         Decimal            @default(0.00) @map("grand_total") @db.Decimal(12, 2)
+  totalPaid          Decimal            @default(0.00) @map("total_paid") @db.Decimal(12, 2)
+  outstandingAmount  Decimal            @default(0.00) @map("outstanding_amount") @db.Decimal(12, 2)
+  notes              String?
+  createdBy          String?            @map("created_by") @db.Uuid
+  updatedBy          String?            @map("updated_by") @db.Uuid
+  submittedBy        String?            @map("submitted_by") @db.Uuid
+  submittedAt        DateTime?          @map("submitted_at") @db.Timestamptz
+  approvedBy         String?            @map("approved_by") @db.Uuid
+  approvedAt         DateTime?          @map("approved_at") @db.Timestamptz
+  cancelledBy        String?            @map("cancelled_by") @db.Uuid
+  cancelledAt        DateTime?          @map("cancelled_at") @db.Timestamptz
+  cancellationReason String?            @map("cancellation_reason")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  items PurchaseBillItem[]
+  payments VendorPayment[]
+  purchaseReturns PurchaseReturn[]
+  vendorDebitNotes VendorDebitNote[]
+
+  @@index([purchaseOrderId])
+  @@index([vendorId])
+  @@index([branchId])
+  @@index([status])
+  @@index([billDate])
+  @@index([billNumber])
+  @@map("purchase_bills")
+  @@schema("public")
+}
+
+model PurchaseBillItem {
+  id                    String               @id @default(uuid()) @db.Uuid
+  purchaseBillId        String               @map("purchase_bill_id") @db.Uuid
+  purchaseBill          PurchaseBill         @relation(fields: [purchaseBillId], references: [id], onDelete: Cascade)
+  purchaseOrderItemId   String?              @map("purchase_order_item_id") @db.Uuid
+  purchaseOrderItem     PurchaseOrderItem?   @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
+  purchaseReceiptItemId String?              @map("purchase_receipt_item_id") @db.Uuid
+  purchaseReceiptItem   PurchaseReceiptItem? @relation(fields: [purchaseReceiptItemId], references: [id], onDelete: SetNull)
+  inventoryItemId       String?              @map("inventory_item_id") @db.Uuid
+  inventoryItem         InventoryItem?       @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  itemName              String               @map("item_name")
+  description           String?
+  quantity              Int                  @default(1)
+  grossWeight           Decimal              @default(0.000) @map("gross_weight") @db.Decimal(12, 3)
+  stoneWeight           Decimal              @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  netWeight             Decimal              @default(0.000) @map("net_weight") @db.Decimal(12, 3)
+  purchaseRate          Decimal              @default(0.00) @map("purchase_rate") @db.Decimal(12, 2)
+  metalValue            Decimal              @default(0.00) @map("metal_value") @db.Decimal(12, 2)
+  makingCharges         Decimal              @default(0.00) @map("making_charges") @db.Decimal(12, 2)
+  discountAmount        Decimal              @default(0.00) @map("discount_amount") @db.Decimal(12, 2)
+  taxableAmount         Decimal              @default(0.00) @map("taxable_amount") @db.Decimal(12, 2)
+  taxRate               Decimal              @default(0.00) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount             Decimal              @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  lineTotal             Decimal              @default(0.00) @map("line_total") @db.Decimal(12, 2)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  purchaseReturnItems   PurchaseReturnItem[]
+
+  @@index([purchaseBillId])
+  @@index([purchaseOrderItemId])
+  @@index([purchaseReceiptItemId])
+  @@index([inventoryItemId])
+  @@map("purchase_bill_items")
+  @@schema("public")
+}
+
+enum VendorPaymentMethod {
+  CASH
+  CARD
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+
+  @@map("vendor_payment_method")
+  @@schema("public")
+}
+
+enum VendorPaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REVERSED
+
+  @@map("vendor_payment_status")
+  @@schema("public")
+}
+
+model VendorPayment {
+  id                   String              @id @default(uuid()) @db.Uuid
+  purchaseBillId       String              @map("purchase_bill_id") @db.Uuid
+  purchaseBill         PurchaseBill        @relation(fields: [purchaseBillId], references: [id], onDelete: Restrict)
+  vendorId             String              @map("vendor_id") @db.Uuid
+  vendor               Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  branchId             String              @map("branch_id") @db.Uuid
+  branch               Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  paymentNumber        String              @unique @map("payment_number")
+  paymentMethod        VendorPaymentMethod @map("payment_method")
+  amount               Decimal             @db.Decimal(12, 2)
+  status               VendorPaymentStatus @default(COMPLETED)
+  transactionReference String?             @map("transaction_reference")
+  paymentDate          DateTime            @default(now()) @map("payment_date") @db.Timestamptz
+  remarks              String?
+  receivedBy           String?             @map("received_by") @db.Uuid
+  processedBy          String?             @map("processed_by") @db.Uuid
+  reversedAt           DateTime?           @map("reversed_at") @db.Timestamptz
+  reversedBy           String?             @map("reversed_by") @db.Uuid
+  reversalReason       String?             @map("reversal_reason")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([purchaseBillId])
+  @@index([vendorId])
+  @@index([branchId])
+  @@index([paymentMethod])
+  @@index([status])
+  @@index([paymentDate])
+  @@index([transactionReference])
+  @@map("vendor_payments")
+  @@schema("public")
+}
+
+enum PurchaseReturnStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PROCESSED
+  CANCELLED
+
+  @@map("purchase_return_status")
+  @@schema("public")
+}
+
+enum DebitNoteStatus {
+  ISSUED
+  APPLIED
+  REVERSED
+
+  @@map("debit_note_status")
+  @@schema("public")
+}
+
+model PurchaseReturn {
+  id                 String               @id @default(uuid()) @db.Uuid
+  returnNumber       String               @unique @map("return_number")
+  purchaseBillId     String?              @map("purchase_bill_id") @db.Uuid
+  purchaseBill       PurchaseBill?        @relation(fields: [purchaseBillId], references: [id], onDelete: SetNull)
+  purchaseOrderId    String?              @map("purchase_order_id") @db.Uuid
+  purchaseOrder      PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  vendorId           String               @map("vendor_id") @db.Uuid
+  vendor             Vendor               @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  branchId           String               @map("branch_id") @db.Uuid
+  branch             Branch               @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  status             PurchaseReturnStatus @default(DRAFT)
+  returnDate         DateTime             @default(now()) @map("return_date") @db.Timestamptz
+  reason             String               @default("DEFECTIVE")
+  notes              String?
+  subtotal           Decimal              @default(0.00) @map("subtotal") @db.Decimal(12, 2)
+  taxAmount          Decimal              @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  totalReturnAmount  Decimal              @default(0.00) @map("total_return_amount") @db.Decimal(12, 2)
+  createdBy          String?              @map("created_by") @db.Uuid
+  updatedBy          String?              @map("updated_by") @db.Uuid
+  submittedBy        String?              @map("submitted_by") @db.Uuid
+  submittedAt        DateTime?            @map("submitted_at") @db.Timestamptz
+  approvedBy         String?              @map("approved_by") @db.Uuid
+  approvedAt         DateTime?            @map("approved_at") @db.Timestamptz
+  processedBy        String?              @map("processed_by") @db.Uuid
+  processedAt        DateTime?            @map("processed_at") @db.Timestamptz
+  cancelledBy        String?              @map("cancelled_by") @db.Uuid
+  cancelledAt        DateTime?            @map("cancelled_at") @db.Timestamptz
+  cancellationReason String?              @map("cancellation_reason")
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  items     PurchaseReturnItem[]
+  debitNote VendorDebitNote?
+
+  @@index([purchaseBillId])
+  @@index([purchaseOrderId])
+  @@index([vendorId])
+  @@index([branchId])
+  @@index([status])
+  @@index([returnDate])
+  @@index([returnNumber])
+  @@map("purchase_returns")
+  @@schema("public")
+}
+
+model PurchaseReturnItem {
+  id                 String            @id @default(uuid()) @db.Uuid
+  purchaseReturnId   String            @map("purchase_return_id") @db.Uuid
+  purchaseReturn     PurchaseReturn    @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  purchaseBillItemId String?           @map("purchase_bill_item_id") @db.Uuid
+  purchaseBillItem   PurchaseBillItem? @relation(fields: [purchaseBillItemId], references: [id], onDelete: SetNull)
+  inventoryItemId    String?           @map("inventory_item_id") @db.Uuid
+  inventoryItem      InventoryItem?    @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  itemName           String            @map("item_name")
+  description        String?
+  quantity           Int               @default(1)
+  grossWeight        Decimal           @default(0.000) @map("gross_weight") @db.Decimal(12, 3)
+  stoneWeight        Decimal           @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  netWeight          Decimal           @default(0.000) @map("net_weight") @db.Decimal(12, 3)
+  purchaseRate       Decimal           @default(0.00) @map("purchase_rate") @db.Decimal(12, 2)
+  metalValue         Decimal           @default(0.00) @map("metal_value") @db.Decimal(12, 2)
+  makingCharges      Decimal           @default(0.00) @map("making_charges") @db.Decimal(12, 2)
+  taxRate            Decimal           @default(0.00) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount          Decimal           @default(0.00) @map("tax_amount") @db.Decimal(12, 2)
+  lineTotal          Decimal           @default(0.00) @map("line_total") @db.Decimal(12, 2)
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([purchaseReturnId])
+  @@index([purchaseBillItemId])
+  @@index([inventoryItemId])
+  @@map("purchase_return_items")
+  @@schema("public")
+}
+
+model VendorDebitNote {
+  id               String          @id @default(uuid()) @db.Uuid
+  debitNoteNumber  String          @unique @map("debit_note_number")
+  purchaseReturnId String          @unique @map("purchase_return_id") @db.Uuid
+  purchaseReturn   PurchaseReturn  @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  vendorId         String          @map("vendor_id") @db.Uuid
+  vendor           Vendor          @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  branchId         String          @map("branch_id") @db.Uuid
+  branch           Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  purchaseBillId   String?         @map("purchase_bill_id") @db.Uuid
+  purchaseBill     PurchaseBill?   @relation(fields: [purchaseBillId], references: [id], onDelete: SetNull)
+  amount           Decimal         @db.Decimal(12, 2)
+  status           DebitNoteStatus @default(ISSUED)
+  issueDate        DateTime        @default(now()) @map("issue_date") @db.Timestamptz
+  remarks          String?
+  createdBy        String?         @map("created_by") @db.Uuid
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([purchaseReturnId])
+  @@index([vendorId])
+  @@index([branchId])
+  @@index([purchaseBillId])
+  @@index([status])
+  @@index([debitNoteNumber])
+  @@map("vendor_debit_notes")
+  @@schema("public")
+}
+
+enum JobWorkOrderStatus {
+  DRAFT
+  SUBMITTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@map("job_work_order_status")
+  @@schema("public")
+}
+
+enum JobWorkItemType {
+  RAW_METAL
+  LOOSE_STONE
+  INVENTORY_ITEM
+
+  @@map("job_work_item_type")
+  @@schema("public")
+}
+
+model JobWorkOrder {
+  id                         String             @id @default(uuid()) @db.Uuid
+  orderNumber                String             @unique @map("order_number")
+  companyId                  String             @map("company_id") @db.Uuid
+  company                    Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId                   String             @map("branch_id") @db.Uuid
+  branch                     Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  vendorId                   String             @map("vendor_id") @db.Uuid
+  vendor                     Vendor             @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  status                     JobWorkOrderStatus @default(DRAFT)
+  issueDate                  DateTime           @default(now()) @map("issue_date") @db.Timestamptz
+  expectedDeliveryDate       DateTime?          @map("expected_delivery_date") @db.Timestamptz
+  completedAt                DateTime?          @map("completed_at") @db.Timestamptz
+  targetItemName             String             @map("target_item_name")
+  metalType                  String             @default("GOLD") @map("metal_type")
+  purity                     String             @default("22K")
+  agreedWastagePercent       Decimal            @default(0.00) @map("agreed_wastage_percent") @db.Decimal(5, 2)
+  agreedMakingChargePerGram Decimal            @default(0.00) @map("agreed_making_charge_per_gram") @db.Decimal(12, 2)
+  totalIssuedFineWeight      Decimal            @default(0.000) @map("total_issued_fine_weight") @db.Decimal(12, 3)
+  totalReceivedFineWeight    Decimal            @default(0.000) @map("total_received_fine_weight") @db.Decimal(12, 3)
+  totalWastageWeight         Decimal            @default(0.000) @map("total_wastage_weight") @db.Decimal(12, 3)
+  totalMakingCharges         Decimal            @default(0.00) @map("total_making_charges") @db.Decimal(12, 2)
+  notes                      String?
+  createdBy                  String?            @map("created_by") @db.Uuid
+  updatedBy                  String?            @map("updated_by") @db.Uuid
+  submittedBy                String?            @map("submitted_by") @db.Uuid
+  submittedAt                DateTime?          @map("submitted_at") @db.Timestamptz
+  assignedBy                 String?            @map("assigned_by") @db.Uuid
+  assignedAt                 DateTime?          @map("assigned_at") @db.Timestamptz
+  completedBy                String?            @map("completed_by") @db.Uuid
+  cancelledBy                String?            @map("cancelled_by") @db.Uuid
+  cancelledAt                DateTime?          @map("cancelled_at") @db.Timestamptz
+  cancellationReason         String?            @map("cancellation_reason")
+  createdAt                  DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                  DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  issuedMaterials JobWorkMaterialIssue[]
+  receipts        JobWorkReceipt[]
+
+  @@index([companyId])
+  @@index([branchId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([issueDate])
+  @@index([orderNumber])
+  @@map("job_work_orders")
+  @@schema("public")
+}
+
+model JobWorkMaterialIssue {
+  id             String          @id @default(uuid()) @db.Uuid
+  jobWorkOrderId String          @map("job_work_order_id") @db.Uuid
+  jobWorkOrder   JobWorkOrder    @relation(fields: [jobWorkOrderId], references: [id], onDelete: Cascade)
+  itemType       JobWorkItemType @default(RAW_METAL) @map("item_type")
+  inventoryItemId String?        @map("inventory_item_id") @db.Uuid
+  inventoryItem  InventoryItem?  @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  description    String
+  grossWeight    Decimal         @default(0.000) @map("gross_weight") @db.Decimal(12, 3)
+  stoneWeight    Decimal         @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  netWeight      Decimal         @default(0.000) @map("net_weight") @db.Decimal(12, 3)
+  purity         String
+  fineWeight     Decimal         @default(0.000) @map("fine_weight") @db.Decimal(12, 3)
+  issuedAt       DateTime        @default(now()) @map("issued_at") @db.Timestamptz
+  issuedBy       String?         @map("issued_by") @db.Uuid
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([jobWorkOrderId])
+  @@index([inventoryItemId])
+  @@map("job_work_material_issues")
+  @@schema("public")
+}
+
+model JobWorkReceipt {
+  id                  String        @id @default(uuid()) @db.Uuid
+  receiptNumber       String        @unique @map("receipt_number")
+  jobWorkOrderId      String        @map("job_work_order_id") @db.Uuid
+  jobWorkOrder        JobWorkOrder  @relation(fields: [jobWorkOrderId], references: [id], onDelete: Cascade)
+  inventoryItemId     String?       @map("inventory_item_id") @db.Uuid
+  inventoryItem       InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  itemName            String        @map("item_name")
+  grossWeight         Decimal       @default(0.000) @map("gross_weight") @db.Decimal(12, 3)
+  stoneWeight         Decimal       @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  netWeight           Decimal       @default(0.000) @map("net_weight") @db.Decimal(12, 3)
+  purity              String
+  fineWeight          Decimal       @default(0.000) @map("fine_weight") @db.Decimal(12, 3)
+  actualWastageWeight Decimal       @default(0.000) @map("actual_wastage_weight") @db.Decimal(12, 3)
+  makingCharges       Decimal       @default(0.00) @map("making_charges") @db.Decimal(12, 2)
+  receivedAt          DateTime      @default(now()) @map("received_at") @db.Timestamptz
+  receivedBy          String?       @map("received_by") @db.Uuid
+  remarks             String?
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([jobWorkOrderId])
+  @@index([inventoryItemId])
+  @@index([receiptNumber])
+  @@map("job_work_receipts")
+  @@schema("public")
+}
+
+enum AuditSessionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  RECONCILED
+  CANCELLED
+
+  @@map("audit_session_status")
+  @@schema("public")
+}
+
+enum AuditItemStatus {
+  MATCHED
+  MISSING
+  UNEXPECTED
+  WEIGHT_MISMATCH
+
+  @@map("audit_item_status")
+  @@schema("public")
+}
+
+model StockAuditSession {
+  id                        String             @id @default(uuid()) @db.Uuid
+  auditNumber               String             @unique @map("audit_number")
+  companyId                 String             @map("company_id") @db.Uuid
+  company                   Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId                  String             @map("branch_id") @db.Uuid
+  branch                    Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  categoryId                String?            @map("category_id") @db.Uuid
+  category                  ProductCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  status                    AuditSessionStatus @default(IN_PROGRESS)
+  startDate                 DateTime           @default(now()) @map("start_date") @db.Timestamptz
+  completedAt               DateTime?          @map("completed_at") @db.Timestamptz
+  totalExpectedItems        Int                @default(0) @map("total_expected_items")
+  totalScannedItems         Int                @default(0) @map("total_scanned_items")
+  totalMatchedItems         Int                @default(0) @map("total_matched_items")
+  totalMissingItems         Int                @default(0) @map("total_missing_items")
+  totalUnexpectedItems      Int                @default(0) @map("total_unexpected_items")
+  totalWeightMismatchItems  Int                @default(0) @map("total_weight_mismatch_items")
+  totalExpectedNetWeight    Decimal            @default(0.000) @map("total_expected_net_weight") @db.Decimal(12, 3)
+  totalScannedNetWeight     Decimal            @default(0.000) @map("total_scanned_net_weight") @db.Decimal(12, 3)
+  notes                     String?
+  auditedBy                 String?            @map("audited_by") @db.Uuid
+  reconciledBy              String?            @map("reconciled_by") @db.Uuid
+  reconciledAt              DateTime?          @map("reconciled_at") @db.Timestamptz
+  cancellationReason        String?            @map("cancellation_reason")
+  createdAt                 DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  scannedItems StockAuditItem[]
+
+  @@index([companyId])
+  @@index([branchId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([startDate])
+  @@index([auditNumber])
+  @@map("stock_audit_sessions")
+  @@schema("public")
+}
+
+model StockAuditItem {
+  id                  String            @id @default(uuid()) @db.Uuid
+  auditSessionId      String            @map("audit_session_id") @db.Uuid
+  auditSession        StockAuditSession @relation(fields: [auditSessionId], references: [id], onDelete: Cascade)
+  inventoryItemId     String?           @map("inventory_item_id") @db.Uuid
+  inventoryItem       InventoryItem?    @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  barcode             String?
+  rfidEpc             String?           @map("rfid_epc")
+  status              AuditItemStatus   @default(MATCHED)
+  expectedGrossWeight Decimal?          @map("expected_gross_weight") @db.Decimal(12, 3)
+  expectedNetWeight   Decimal?          @map("expected_net_weight") @db.Decimal(12, 3)
+  scannedGrossWeight  Decimal?          @map("scanned_gross_weight") @db.Decimal(12, 3)
+  scannedNetWeight    Decimal?          @map("scanned_net_weight") @db.Decimal(12, 3)
+  weightDiscrepancy   Decimal           @default(0.000) @map("weight_discrepancy") @db.Decimal(12, 3)
+  remarks             String?
+  scannedAt           DateTime          @default(now()) @map("scanned_at") @db.Timestamptz
+  scannedBy           String?           @map("scanned_by") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([auditSessionId])
+  @@index([inventoryItemId])
+  @@index([barcode])
+  @@index([rfidEpc])
+  @@index([status])
+  @@map("stock_audit_items")
+  @@schema("public")
+}
+
+enum GirviLoanStatus {
+  DRAFT
+  ACTIVE
+  RENEWED
+  CLOSED
+  DEFAULTED
+  CANCELLED
+
+  @@map("girvi_loan_status")
+  @@schema("public")
+}
+
+enum GirviInterestPeriod {
+  MONTHLY
+  ANNUAL
+
+  @@map("girvi_interest_period")
+  @@schema("public")
+}
+
+model GirviLoan {
+  id                 String              @id @default(uuid()) @db.Uuid
+  loanNumber         String              @unique @map("loan_number")
+  companyId          String              @map("company_id") @db.Uuid
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId           String              @map("branch_id") @db.Uuid
+  branch             Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId         String              @map("customer_id") @db.Uuid
+  customer           Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  status             GirviLoanStatus     @default(ACTIVE)
+  loanDate           DateTime            @default(now()) @map("loan_date") @db.Timestamptz
+  dueDate            DateTime            @map("due_date") @db.Timestamptz
+  principalAmount    Decimal             @default(0.00) @map("principal_amount") @db.Decimal(12, 2)
+  valuationAmount    Decimal             @default(0.00) @map("valuation_amount") @db.Decimal(12, 2)
+  interestRate       Decimal             @default(0.00) @map("interest_rate") @db.Decimal(5, 2)
+  interestPeriod     GirviInterestPeriod @default(MONTHLY) @map("interest_period")
+  notes              String?
+  documentRef        String?             @map("document_ref")
+  createdBy          String?             @map("created_by") @db.Uuid
+  updatedBy          String?             @map("updated_by") @db.Uuid
+  approvedBy         String?             @map("approved_by") @db.Uuid
+  approvedAt         DateTime?           @map("approved_at") @db.Timestamptz
+  closedBy           String?             @map("closed_by") @db.Uuid
+  closedAt           DateTime?           @map("closed_at") @db.Timestamptz
+  cancelledBy        String?             @map("cancelled_by") @db.Uuid
+  cancelledAt        DateTime?           @map("cancelled_at") @db.Timestamptz
+  cancellationReason String?             @map("cancellation_reason")
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  collaterals GirviCollateral[]
+  collections GirviCollection[]
+  renewals    GirviRenewal[]
+  settlement  GirviSettlement?
+
+  @@index([companyId])
+  @@index([branchId])
+  @@index([customerId])
+  @@index([status])
+  @@index([loanDate])
+  @@index([loanNumber])
+  @@map("girvi_loans")
+  @@schema("public")
+}
+
+model GirviCollateral {
+  id              String         @id @default(uuid()) @db.Uuid
+  girviLoanId     String         @map("girvi_loan_id") @db.Uuid
+  girviLoan       GirviLoan      @relation(fields: [girviLoanId], references: [id], onDelete: Cascade)
+  inventoryItemId String?        @map("inventory_item_id") @db.Uuid
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  itemName        String         @map("item_name")
+  metalType       String         @default("GOLD") @map("metal_type")
+  purity          String         @default("22K")
+  grossWeight     Decimal        @default(0.000) @map("gross_weight") @db.Decimal(12, 3)
+  stoneWeight     Decimal        @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  netWeight       Decimal        @default(0.000) @map("net_weight") @db.Decimal(12, 3)
+  valuedAmount    Decimal        @default(0.00) @map("valued_amount") @db.Decimal(12, 2)
+  barcode         String?
+  rfidEpc         String?        @map("rfid_epc")
+  imageUrl        String?        @map("image_url")
+  remarks         String?
+  isReleased      Boolean        @default(false) @map("is_released")
+  releasedAt      DateTime?      @map("released_at") @db.Timestamptz
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([girviLoanId])
+  @@index([inventoryItemId])
+  @@index([barcode])
+  @@index([rfidEpc])
+  @@map("girvi_collaterals")
+  @@schema("public")
+}
+
+enum GirviCollectionStatus {
+  COMPLETED
+  REVERSED
+
+  @@map("girvi_collection_status")
+  @@schema("public")
+}
+
+enum GirviPaymentMethod {
+  CASH
+  CARD
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+
+  @@map("girvi_payment_method")
+  @@schema("public")
+}
+
+model GirviCollection {
+  id                   String                @id @default(uuid()) @db.Uuid
+  collectionNumber     String                @unique @map("collection_number")
+  girviLoanId          String                @map("girvi_loan_id") @db.Uuid
+  girviLoan            GirviLoan             @relation(fields: [girviLoanId], references: [id], onDelete: Restrict)
+  paymentMethod        GirviPaymentMethod    @default(CASH) @map("payment_method")
+  amount               Decimal               @map("amount") @db.Decimal(12, 2)
+  principalAmount      Decimal               @default(0.00) @map("principal_amount") @db.Decimal(12, 2)
+  interestAmount       Decimal               @default(0.00) @map("interest_amount") @db.Decimal(12, 2)
+  transactionReference String?               @map("transaction_reference")
+  collectionDate       DateTime              @default(now()) @map("collection_date") @db.Timestamptz
+  status               GirviCollectionStatus @default(COMPLETED)
+  reversalReason       String?               @map("reversal_reason")
+  reversedAt           DateTime?             @map("reversed_at") @db.Timestamptz
+  reversedBy           String?               @map("reversed_by") @db.Uuid
+  receivedBy           String?               @map("received_by") @db.Uuid
+  remarks              String?
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([girviLoanId])
+  @@index([collectionNumber])
+  @@index([status])
+  @@map("girvi_collections")
+  @@schema("public")
+}
+
+model GirviRenewal {
+  id                       String    @id @default(uuid()) @db.Uuid
+  girviLoanId              String    @map("girvi_loan_id") @db.Uuid
+  girviLoan                GirviLoan @relation(fields: [girviLoanId], references: [id], onDelete: Cascade)
+  previousDueDate          DateTime  @map("previous_due_date") @db.Timestamptz
+  newDueDate               DateTime  @map("new_due_date") @db.Timestamptz
+  accruedInterestAtRenewal Decimal   @default(0.00) @map("accrued_interest_at_renewal") @db.Decimal(12, 2)
+  principalAtRenewal       Decimal   @default(0.00) @map("principal_at_renewal") @db.Decimal(12, 2)
+  interestPaidAtRenewal    Decimal   @default(0.00) @map("interest_paid_at_renewal") @db.Decimal(12, 2)
+  renewedBy                String?   @map("renewed_by") @db.Uuid
+  remarks                  String?
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([girviLoanId])
+  @@map("girvi_renewals")
+  @@schema("public")
+}
+
+model GirviSettlement {
+  id                   String             @id @default(uuid()) @db.Uuid
+  settlementNumber     String             @unique @map("settlement_number")
+  girviLoanId          String             @unique @map("girvi_loan_id") @db.Uuid
+  girviLoan            GirviLoan          @relation(fields: [girviLoanId], references: [id], onDelete: Restrict)
+  paymentMethod        GirviPaymentMethod @default(CASH) @map("payment_method")
+  totalSettlementAmount Decimal            @map("total_settlement_amount") @db.Decimal(12, 2)
+  principalSettled     Decimal            @default(0.00) @map("principal_settled") @db.Decimal(12, 2)
+  interestSettled      Decimal            @default(0.00) @map("interest_settled") @db.Decimal(12, 2)
+  transactionReference String?            @map("transaction_reference")
+  settlementDate       DateTime           @default(now()) @map("settlement_date") @db.Timestamptz
+  remarks              String?
+  settledBy            String?            @map("settled_by") @db.Uuid
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([girviLoanId])
+  @@index([settlementNumber])
+  @@map("girvi_settlements")
+  @@schema("public")
+}
+
+enum ThirdPartyGirviStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  CANCELLED
+
+  @@map("third_party_girvi_status")
+  @@schema("public")
+}
+
+model ThirdPartyLender {
+  id            String             @id @default(uuid()) @db.Uuid
+  lenderCode    String             @map("lender_code")
+  name          String
+  contactPerson String?            @map("contact_person")
+  mobile        String?
+  email         String?
+  address       String?
+  isActive      Boolean            @default(true) @map("is_active")
+  companyId     String             @map("company_id") @db.Uuid
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId      String?            @map("branch_id") @db.Uuid
+  branch        Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+  girviLoans    ThirdPartyGirvi[]
+
+  @@unique([companyId, lenderCode])
+  @@index([companyId])
+  @@index([branchId])
+  @@map("third_party_lenders")
+  @@schema("public")
+}
+
+model ThirdPartyGirvi {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  referenceNumber    String                     @unique @map("reference_number")
+  externalLoanNumber String                     @map("external_loan_number")
+  companyId          String                     @map("company_id") @db.Uuid
+  company            Company                    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId           String                     @map("branch_id") @db.Uuid
+  branch             Branch                     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId         String                     @map("customer_id") @db.Uuid
+  customer           Customer                   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  thirdPartyLenderId String                     @map("third_party_lender_id") @db.Uuid
+  lender             ThirdPartyLender           @relation(fields: [thirdPartyLenderId], references: [id], onDelete: Restrict)
+  loanDate           DateTime                   @default(now()) @map("loan_date") @db.Timestamptz
+  dueDate            DateTime                   @map("due_date") @db.Timestamptz
+  principalAmount    Decimal                    @map("principal_amount") @db.Decimal(12, 2)
+  valuationAmount    Decimal                    @default(0.00) @map("valuation_amount") @db.Decimal(12, 2)
+  interestRate       Decimal                    @default(0.00) @map("interest_rate") @db.Decimal(5, 2)
+  interestPeriod     GirviInterestPeriod        @default(MONTHLY) @map("interest_period")
+  status             ThirdPartyGirviStatus      @default(DRAFT)
+  notes              String?
+  documentRef        String?
+  createdBy          String?                    @map("created_by") @db.Uuid
+  approvedBy         String?                    @map("approved_by") @db.Uuid
+  approvedAt         DateTime?                  @map("approved_at") @db.Timestamptz
+  closedBy           String?                    @map("closed_by") @db.Uuid
+  closedAt           DateTime?                  @map("closed_at") @db.Timestamptz
+  closureReason      String?                    @map("closure_reason")
+  cancelledBy        String?                    @map("cancelled_by") @db.Uuid
+  cancelledAt        DateTime?                  @map("cancelled_at") @db.Timestamptz
+  cancellationReason String?                    @map("cancellation_reason")
+  createdAt          DateTime                   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime                   @updatedAt @map("updated_at") @db.Timestamptz
+
+  collaterals ThirdPartyGirviCollateral[]
+
+  @@unique([companyId, thirdPartyLenderId, externalLoanNumber])
+  @@index([companyId])
+  @@index([branchId])
+  @@index([customerId])
+  @@index([thirdPartyLenderId])
+  @@index([status])
+  @@index([referenceNumber])
+  @@map("third_party_girvis")
+  @@schema("public")
+}
+
+model ThirdPartyGirviCollateral {
+  id                String          @id @default(uuid()) @db.Uuid
+  thirdPartyGirviId String          @map("third_party_girvi_id") @db.Uuid
+  thirdPartyGirvi   ThirdPartyGirvi @relation(fields: [thirdPartyGirviId], references: [id], onDelete: Cascade)
+  inventoryItemId   String?         @map("inventory_item_id") @db.Uuid
+  inventoryItem     InventoryItem?  @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  itemName          String          @map("item_name")
+  metalType         String          @default("GOLD") @map("metal_type")
+  purity            String          @default("22K")
+  grossWeight       Decimal         @default(0.000) @map("gross_weight") @db.Decimal(12, 3)
+  stoneWeight       Decimal         @default(0.000) @map("stone_weight") @db.Decimal(12, 3)
+  netWeight         Decimal         @default(0.000) @map("net_weight") @db.Decimal(12, 3)
+  valuedAmount      Decimal         @default(0.00) @map("valued_amount") @db.Decimal(12, 2)
+  barcode           String?
+  rfidEpc           String?         @map("rfid_epc")
+  imageUrl          String?         @map("image_url")
+  isReleased        Boolean         @default(false) @map("is_released")
+  releasedAt        DateTime?       @map("released_at") @db.Timestamptz
+  remarks           String?
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([thirdPartyGirviId])
+  @@index([inventoryItemId])
+  @@map("third_party_girvi_collaterals")
+  @@schema("public")
+}
+
+// ==========================================
+// PHASE 7 SELL ON APPROVAL MODELS (Public Schema)
+// ==========================================
+
+enum ApprovalStatus {
+  DRAFT
+  ISSUED
+  WITH_CUSTOMER
+  RETURNED
+  PURCHASED
+  EXPIRED
+  CANCELLED
+
+  @@map("approval_status")
+  @@schema("public")
+}
+
+enum ApprovalItemStatus {
+  ISSUED
+  RETURNED
+  PURCHASED
+  CANCELLED
+
+  @@map("approval_item_status")
+  @@schema("public")
+}
+
+model Approval {
+  id                    String         @id @default(uuid()) @db.Uuid
+  approvalNumber        String         @unique @map("approval_number")
+  companyId             String         @map("company_id") @db.Uuid
+  company               Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId              String         @map("branch_id") @db.Uuid
+  branch                Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId            String         @map("customer_id") @db.Uuid
+  customer              Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salespersonId         String?        @map("salesperson_id") @db.Uuid
+  salesperson           Employee?      @relation(fields: [salespersonId], references: [id], onDelete: SetNull)
+  issueDate             DateTime       @default(now()) @map("issue_date") @db.Timestamptz
+  dueDate               DateTime       @map("due_date") @db.Timestamptz
+  status                ApprovalStatus @default(DRAFT)
+  notes                 String?
+  totalAmount           Decimal        @default(0.00) @map("total_amount") @db.Decimal(12, 2)
+  totalQuantity         Int            @default(0) @map("total_quantity")
+  requiredDepositAmount Decimal        @default(0.00) @map("required_deposit_amount") @db.Decimal(12, 2)
+  createdBy             String?        @map("created_by") @db.Uuid
+  updatedBy             String?        @map("updated_by") @db.Uuid
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  items    ApprovalItem[]
+  deposits ApprovalDeposit[]
+
+  @@unique([companyId, approvalNumber])
+  @@index([companyId])
+  @@index([branchId])
+  @@index([customerId])
+  @@index([salespersonId])
+  @@index([status])
+  @@index([approvalNumber])
+  @@map("approvals")
+  @@schema("public")
+}
+
+model ApprovalItem {
+  id              String             @id @default(uuid()) @db.Uuid
+  approvalId      String             @map("approval_id") @db.Uuid
+  approval        Approval           @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  inventoryItemId String             @map("inventory_item_id") @db.Uuid
+  inventoryItem   InventoryItem      @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  quantity        Int                @default(1)
+  unitPrice       Decimal            @default(0.00) @map("unit_price") @db.Decimal(12, 2)
+  totalPrice      Decimal            @default(0.00) @map("total_price") @db.Decimal(12, 2)
+  status          ApprovalItemStatus @default(ISSUED)
+  issuedAt        DateTime           @default(now()) @map("issued_at") @db.Timestamptz
+  notes           String?
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([approvalId])
+  @@index([inventoryItemId])
+  @@index([status])
+  @@map("approval_items")
+  @@schema("public")
+}
+
+model ApprovalDeposit {
+  id                   String        @id @default(uuid()) @db.Uuid
+  approvalId           String        @map("approval_id") @db.Uuid
+  approval             Approval      @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  companyId            String        @map("company_id") @db.Uuid
+  company              Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId             String        @map("branch_id") @db.Uuid
+  branch               Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId           String        @map("customer_id") @db.Uuid
+  customer             Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  depositNumber        String        @unique @map("deposit_number")
+  paymentMethod        PaymentMethod @map("payment_method")
+  amount               Decimal       @db.Decimal(12, 2)
+  status               PaymentStatus @default(COMPLETED)
+  transactionReference String?       @map("transaction_reference")
+  paymentDate          DateTime      @default(now()) @map("payment_date") @db.Timestamptz
+  remarks              String?
+  receivedBy           String?       @map("received_by") @db.Uuid
+  reversedAt           DateTime?     @map("reversed_at") @db.Timestamptz
+  reversedBy           String?       @map("reversed_by") @db.Uuid
+  reversalReason       String?       @map("reversal_reason")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([companyId, depositNumber])
+  @@index([approvalId])
+  @@index([companyId])
+  @@index([branchId])
+  @@index([customerId])
+  @@index([status])
+  @@index([paymentMethod])
+  @@index([paymentDate])
+  @@map("approval_deposits")
+  @@schema("public")
+}
+
+
+
+
